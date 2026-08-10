@@ -50,7 +50,7 @@ See [docs/API.md](docs/API.md) for textured panels, custom buttons, content, and
 ./gradlew test build
 ```
 
-The output is `build/libs/panelsnotscreens-0.1.0.jar`.
+The output is `build/libs/panelsnotscreens-1.0.jar`.
 
 ## License
 
