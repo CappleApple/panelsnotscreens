@@ -96,4 +96,12 @@ The store receives the namespaced panel ID and a `PanelState` containing X/Y han
 
 ## Multiple panels and z order
 
-Create a `PanelManager` owned by your mod, add panels in back-to-front order, and route render/input through it. The manager brings a clicked panel to the front. There is no mandatory global registry, so unrelated mods do not share mutable panel state.
+Create a `PanelManager` owned by your mod and route rendering and input through it. The add order
+sets only the initial back-to-front order. Whenever a panel handles a click, release, scroll,
+keyboard event, or typed character, the manager moves it to the front so the most recently
+interacted-with panel is rendered on top.
+
+Render depth is coordinated across all `Panel` instances loaded from the same library, even when
+different mods own separate managers. The shared stack uses weak references and does not share
+panel content or persisted state. For an interaction handled outside the panel input methods, call
+`panel.bringToFront()` explicitly.

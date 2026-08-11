@@ -8,7 +8,11 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.resources.ResourceLocation;
 
-/** Consumer-owned z-ordered panel collection. No global singleton is required. */
+/**
+ * Consumer-owned z-ordered panel collection. Panels that handle input are automatically moved to
+ * the front, so the most recently interacted-with panel is rendered on top. No global singleton is
+ * required.
+ */
 public final class PanelManager {
     private final ArrayList<Panel> panels = new ArrayList<>();
 
@@ -24,7 +28,10 @@ public final class PanelManager {
     public List<Panel> panels() { return Collections.unmodifiableList(panels); }
 
     public void bringToFront(Panel panel) {
-        if (panels.remove(panel)) panels.add(panel);
+        if (panels.remove(panel)) {
+            panels.add(panel);
+            panel.bringToFront();
+        }
     }
 
     public void render(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
@@ -43,14 +50,50 @@ public final class PanelManager {
 
     public boolean mouseReleased(Screen screen, double mouseX, double mouseY, int button) {
         for (int index = panels.size() - 1; index >= 0; index--) {
-            if (panels.get(index).mouseReleased(screen, mouseX, mouseY, button)) return true;
+            Panel panel = panels.get(index);
+            if (!panel.mouseReleased(screen, mouseX, mouseY, button)) continue;
+            bringToFront(panel);
+            return true;
         }
         return false;
     }
 
     public boolean mouseScrolled(Screen screen, double mouseX, double mouseY, double amount) {
         for (int index = panels.size() - 1; index >= 0; index--) {
-            if (panels.get(index).mouseScrolled(screen, mouseX, mouseY, amount)) return true;
+            Panel panel = panels.get(index);
+            if (!panel.mouseScrolled(screen, mouseX, mouseY, amount)) continue;
+            bringToFront(panel);
+            return true;
+        }
+        return false;
+    }
+
+    public boolean keyPressed(Screen screen, int keyCode, int scanCode, int modifiers) {
+        for (int index = panels.size() - 1; index >= 0; index--) {
+            Panel panel = panels.get(index);
+            if (!panel.keyPressed(screen, keyCode, scanCode, modifiers)) continue;
+            bringToFront(panel);
+            return true;
+        }
+        return false;
+    }
+
+    public boolean keyReleased(Screen screen, int keyCode, int scanCode, int modifiers) {
+        for (int index = panels.size() - 1; index >= 0; index--) {
+            Panel panel = panels.get(index);
+            if (!panel.keyReleased(screen, keyCode, scanCode, modifiers)) continue;
+            bringToFront(panel);
+            return true;
+        }
+        return false;
+    }
+
+    public boolean characterTyped(Screen screen, char codePoint, int modifiers) {
+        for (int index = panels.size() - 1; index >= 0; index--) {
+            Panel panel = panels.get(index);
+            if (!panel.characterTyped(screen, codePoint, modifiers)) continue;
+            bringToFront(panel);
+            return true;
         }
         return false;
     }

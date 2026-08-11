@@ -83,6 +83,7 @@ public final class Panel {
         expanded = builder.expanded;
         visible = builder.visible;
         stateStore.load(id).ifPresent(this::restore);
+        PanelStack.register(this);
     }
 
     public ResourceLocation id() { return id; }
@@ -122,6 +123,8 @@ public final class Panel {
     public void addButton(PanelButton button) { buttons.add(Objects.requireNonNull(button)); }
     public boolean removeButton(ResourceLocation buttonId) { return buttons.removeIf(button -> button.id().equals(buttonId)); }
     public void cancelPointerCapture() { clearPointerCapture(); }
+    /** Moves this panel above every other panel using this library, including panels from other mods. */
+    public void bringToFront() { PanelStack.bringToFront(this); }
 
     public PanelState state() { return new PanelState(handleX, handleY, dockSide, expanded, visible); }
 
@@ -158,7 +161,7 @@ public final class Panel {
         updateDrag(screen, mouseX, mouseY);
         PanelContext context = context(screen, partialTick);
         graphics.pose().pushPose();
-        graphics.pose().translate(0, 0, 300);
+        graphics.pose().translate(0, 0, PanelStack.z(this));
         try {
             if (expanded) {
                 renderer.renderPanel(context, graphics, mouseX, mouseY);
@@ -192,6 +195,7 @@ public final class Panel {
         if (!visible) return false;
         PanelContext context = context(screen, 0);
         if (context.layout().handle().contains(mouseX, mouseY)) {
+            bringToFront();
             capturedScreen = screen;
             capturedButton = button;
             handleCaptured = true;
@@ -208,12 +212,14 @@ public final class Panel {
         for (int index = buttons.size() - 1; index >= 0; index--) {
             PanelButton candidate = buttons.get(index);
             if (!buttonParticipates(candidate) || !candidate.bounds(context.layout()).contains(mouseX, mouseY)) continue;
+            bringToFront();
             capturedScreen = screen;
             capturedButton = button;
             pressedButton = candidate;
             return true;
         }
         if (!context.layout().panel().contains(mouseX, mouseY)) return false;
+        bringToFront();
         capturedScreen = screen;
         capturedButton = button;
         contentCaptured = true;
@@ -242,6 +248,7 @@ public final class Panel {
         if (!visible || !expanded) return false;
         PanelContext context = context(screen, 0);
         if (!context.layout().panel().contains(mouseX, mouseY)) return false;
+        bringToFront();
         content.mouseScrolled(context, mouseX, mouseY, amount);
         return true;
     }
@@ -251,20 +258,27 @@ public final class Panel {
         if (expanded) {
             for (PanelButton button : visibleButtons()) {
                 if (button.isEnabled() && button.matchesShortcut(keyCode)) {
+                    bringToFront();
                     button.click(this, 0);
                     return true;
                 }
             }
         }
-        return expanded && content.keyPressed(context(screen, 0), keyCode, scanCode, modifiers);
+        if (!expanded || !content.keyPressed(context(screen, 0), keyCode, scanCode, modifiers)) return false;
+        bringToFront();
+        return true;
     }
 
     public boolean keyReleased(Screen screen, int keyCode, int scanCode, int modifiers) {
-        return visible && expanded && content.keyReleased(context(screen, 0), keyCode, scanCode, modifiers);
+        if (!visible || !expanded || !content.keyReleased(context(screen, 0), keyCode, scanCode, modifiers)) return false;
+        bringToFront();
+        return true;
     }
 
     public boolean characterTyped(Screen screen, char codePoint, int modifiers) {
-        return visible && expanded && content.characterTyped(context(screen, 0), codePoint, modifiers);
+        if (!visible || !expanded || !content.characterTyped(context(screen, 0), codePoint, modifiers)) return false;
+        bringToFront();
+        return true;
     }
 
     public boolean ownsPoint(Screen screen, double mouseX, double mouseY) {
