@@ -105,3 +105,12 @@ Render depth is coordinated across all `Panel` instances loaded from the same li
 different mods own separate managers. The shared stack uses weak references and does not share
 panel content or persisted state. For an interaction handled outside the panel input methods, call
 `panel.bringToFront()` explicitly.
+
+Tooltips rendered directly by panel content inherit the panel's render depth. When panel content
+defers a tooltip to the owning screen, the library records which panel requested it and elevates the
+tooltip above that panel. A background panel's tooltip remains below panels stacked in front of its
+owner; a focused panel's tooltip renders above every panel.
+
+Tooltips rendered immediately after `PanelManager.render(...)` are associated with the last panel
+in that render batch under the same mouse coordinates. This supports consumer-managed tooltip
+lists without requiring the tooltip call to occur inside `PanelContent.render(...)`.

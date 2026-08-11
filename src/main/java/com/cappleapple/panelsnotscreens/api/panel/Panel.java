@@ -160,8 +160,10 @@ public final class Panel {
         if (!visible) return;
         updateDrag(screen, mouseX, mouseY);
         PanelContext context = context(screen, partialTick);
+        Object deferredTooltipBeforeRender = PanelStack.deferredTooltip(screen);
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, PanelStack.z(this));
+        PanelStack.beginRender(this);
         try {
             if (expanded) {
                 renderer.renderPanel(context, graphics, mouseX, mouseY);
@@ -187,6 +189,9 @@ public final class Panel {
                     handle.contains(mouseX, mouseY), handlePressed);
             content.renderHandle(context, graphics, mouseX, mouseY);
         } finally {
+            PanelStack.captureDeferredTooltipOwner(this, screen, deferredTooltipBeforeRender);
+            PanelStack.captureTooltipCandidate(this, screen, graphics, mouseX, mouseY);
+            PanelStack.endRender(this);
             graphics.pose().popPose();
         }
     }

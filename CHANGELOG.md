@@ -2,6 +2,27 @@
 
 All notable changes to Panels Not Screens are documented here.
 
+## 1.1.3 - 2026-08-11
+
+### Fixed
+
+- Tooltips rendered immediately after a panel render now retain that panel as their owner, fixing
+  focused-panel tooltips that regressed behind their own panel in `1.1.2`.
+
+## 1.1.2 - 2026-08-11
+
+### Fixed
+
+- Deferred tooltips render above their owning panel. Tooltips from background panels remain below
+  panels stacked in front, while tooltips from the focused panel render above every panel.
+
+## 1.1.1 - 2026-08-11
+
+### Fixed
+
+- Deferred tooltips displayed over a focused panel are elevated above that panel instead of being
+  hidden behind it.
+
 ## [1.1] - 2026-08-11
 
 ### Added

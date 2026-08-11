@@ -35,7 +35,12 @@ public final class PanelManager {
     }
 
     public void render(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        for (Panel panel : panels) panel.render(screen, graphics, mouseX, mouseY, partialTick);
+        PanelStack.beginRenderCollection();
+        try {
+            for (Panel panel : panels) panel.render(screen, graphics, mouseX, mouseY, partialTick);
+        } finally {
+            PanelStack.endRenderCollection();
+        }
     }
 
     public boolean mouseClicked(Screen screen, double mouseX, double mouseY, int button) {

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.cappleapple.panelsnotscreens.api.widget.PanelButton;
+import java.util.List;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -55,11 +56,49 @@ class PanelManagerTest {
         Panel second = panel("second", 200, 20);
         PanelManager firstManager = manager(first);
         manager(second);
+        Screen screen = screen();
         assertTrue(PanelStack.z(second) > PanelStack.z(first));
 
-        assertTrue(firstManager.mouseClicked(screen(), 25, 25, 0));
+        assertTrue(firstManager.mouseClicked(screen, 25, 25, 0));
 
         assertTrue(PanelStack.z(first) > PanelStack.z(second));
+    }
+
+    @Test
+    void deferredTooltipKeepsThePanelThatRequestedItAsOwner() {
+        Panel tooltipOwner = panel("owner", 20, 20);
+        Panel focused = panel("focused", 20, 20);
+        Screen screen = screen();
+        Object beforeTooltip = PanelStack.deferredTooltip(screen);
+        screen.setTooltipForNextRenderPass(List.of(Component.literal("Owned tooltip").getVisualOrderText()));
+        PanelStack.captureDeferredTooltipOwner(tooltipOwner, screen, beforeTooltip);
+
+        Object beforeFocusedPanel = PanelStack.deferredTooltip(screen);
+        PanelStack.captureDeferredTooltipOwner(focused, screen, beforeFocusedPanel);
+        focused.bringToFront();
+
+        assertSame(tooltipOwner, PanelStack.deferredTooltipOwner(screen));
+        assertTrue(PanelStack.z(focused) > PanelStack.z(tooltipOwner));
+        assertTrue(PanelStack.tooltipZ(tooltipOwner) < PanelStack.z(focused));
+
+        tooltipOwner.bringToFront();
+
+        assertTrue(PanelStack.tooltipZ(tooltipOwner) > PanelStack.z(focused));
+    }
+
+    @Test
+    void immediateTooltipKeepsThePanelRenderedUnderThePointerAsOwner() {
+        Panel tooltipOwner = panel("owner", 20, 20);
+        Panel focused = panel("focused", 200, 20);
+        Screen screen = screen();
+        focused.bringToFront();
+
+        PanelStack.beginRenderCollection();
+        PanelStack.captureTooltipCandidate(tooltipOwner, screen, null, 25, 25);
+        PanelStack.endRenderCollection();
+
+        assertSame(tooltipOwner, PanelStack.immediateTooltipOwner(screen, null, 25, 25));
+        assertTrue(PanelStack.tooltipZ(tooltipOwner) < PanelStack.z(focused));
     }
 
     private static Panel panel(String path, int x, int y) {
