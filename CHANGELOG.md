@@ -1,0 +1,33 @@
+# Changelog
+
+All notable changes to Panels Not Screens are documented here.
+
+## [1.1] - 2026-08-11
+
+### Added
+
+- Shared panel focus and render ordering across different mods, even when each mod owns a separate
+  `PanelManager`.
+- `Panel.bringToFront()` for interactions managed outside the library's normal input methods.
+- `PanelManager` routing for key presses, key releases, and typed characters.
+- Automated coverage for click, scroll, keyboard, and cross-manager stacking behavior.
+
+### Changed
+
+- The most recently interacted-with panel now renders above older panels instead of remaining in a
+  fixed mod or registration order.
+- Handled mouse releases, scrolling, keyboard events, and typed characters now also update panel
+  focus.
+- Panel render layers reserve enough depth for item icons, decorations, and tooltips so content from
+  an older panel does not bleed through the focused panel.
+
+### Fixed
+
+- Fixed panels from one mod always appearing beneath panels from another mod after being clicked.
+
+## [1.0] - 2026-08-10
+
+- Initial release of the reusable NeoForge 1.21.1 draggable, dockable panel framework.
+
+[1.1]: https://github.com/CappleApple/panelsnotscreens/compare/bb0853e...da45399
+[1.0]: https://github.com/CappleApple/panelsnotscreens/commit/bb0853e
