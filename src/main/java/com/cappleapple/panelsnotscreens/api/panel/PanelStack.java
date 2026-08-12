@@ -5,30 +5,26 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.WeakHashMap;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.neoforged.bus.api.EventPriority;
-import net.neoforged.neoforge.client.event.RenderTooltipEvent;
-import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.fml.ModList;
 
 /** Shared render order for every panel loaded from this library, including panels owned by different mods. */
 final class PanelStack {
     private static final int BASE_Z = 300;
-    private static final int PREFERRED_LAYER_SPACING = 500;
-    private static final int MAX_BASE_Z = 9000;
+    private static final int VANILLA_TOOLTIP_Z = 400;
+    // Tooltip Overhaul reaches Z 2300 and some icon/effect layers apply that depth a second time.
+    private static final int TOOLTIP_OVERHAUL_Z = 4700;
+    private static final int DEFAULT_LAYER_SPACING = 500;
+    private static final int TOOLTIP_OVERHAUL_LAYER_SPACING = 4800;
+    private static final int DEFAULT_MAX_BASE_Z = 9000;
+    private static final String TOOLTIP_OVERHAUL_MOD_ID = "tooltipoverhaul";
     private static final ArrayList<WeakReference<Panel>> PANELS = new ArrayList<>();
     private static final WeakHashMap<Screen, DeferredTooltipOwner> DEFERRED_TOOLTIP_OWNERS = new WeakHashMap<>();
     private static final ThreadLocal<Panel> RENDERING_PANEL = new ThreadLocal<>();
-    private static final ThreadLocal<TooltipAdjustment> TOOLTIP_ADJUSTMENT = new ThreadLocal<>();
     private static final ThreadLocal<TooltipCandidate> TOOLTIP_CANDIDATE = new ThreadLocal<>();
     private static final ThreadLocal<Integer> RENDER_COLLECTION_DEPTH = ThreadLocal.withInitial(() -> 0);
     private static final Field DEFERRED_TOOLTIP_FIELD = findDeferredTooltipField();
-
-    static {
-        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, PanelStack::beforeTooltip);
-        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, PanelStack::adjustTooltipDepth);
-    }
 
     private PanelStack() { }
 
@@ -52,7 +48,7 @@ final class PanelStack {
     }
 
     static synchronized int tooltipZ(Panel panel) {
-        return z(panel) + 400;
+        return z(panel) + tooltipDepth();
     }
 
     private static void remove(Panel panel) {
@@ -68,8 +64,26 @@ final class PanelStack {
 
     private static int zForIndex(int index) {
         int gaps = Math.max(1, PANELS.size() - 1);
-        int spacing = Math.min(PREFERRED_LAYER_SPACING, (MAX_BASE_Z - BASE_Z) / gaps);
+        int spacing = Math.min(preferredLayerSpacing(), (maxBaseZ() - BASE_Z) / gaps);
         return BASE_Z + index * Math.max(1, spacing);
+    }
+
+    private static int preferredLayerSpacing() {
+        return hasTooltipOverhaul() ? TOOLTIP_OVERHAUL_LAYER_SPACING : DEFAULT_LAYER_SPACING;
+    }
+
+    private static int tooltipDepth() {
+        return hasTooltipOverhaul() ? TOOLTIP_OVERHAUL_Z : VANILLA_TOOLTIP_Z;
+    }
+
+    private static int maxBaseZ() {
+        return hasTooltipOverhaul()
+                ? (int) GuiGraphics.MAX_GUI_Z - TOOLTIP_OVERHAUL_Z
+                : DEFAULT_MAX_BASE_Z;
+    }
+
+    private static boolean hasTooltipOverhaul() {
+        return ModList.get().isLoaded(TOOLTIP_OVERHAUL_MOD_ID);
     }
 
     static void beginRender(Panel panel) {
@@ -140,31 +154,25 @@ final class PanelStack {
         return owner.panel().get();
     }
 
-    private static void beforeTooltip(RenderTooltipEvent.Pre event) {
-        TOOLTIP_ADJUSTMENT.remove();
-        if (RENDERING_PANEL.get() != null) return;
-        Screen screen = Minecraft.getInstance().screen;
-        if (screen == null) return;
+    static boolean beginTooltipRender(Screen screen, GuiGraphics graphics, int mouseX, int mouseY) {
+        if (screen == null || RENDERING_PANEL.get() != null) return false;
         Panel owner = deferredTooltipOwner(screen);
         synchronized (PanelStack.class) {
             DEFERRED_TOOLTIP_OWNERS.remove(screen);
         }
         if (owner == null) {
-            owner = immediateTooltipOwner(screen, event.getGraphics(), event.getX(), event.getY());
+            owner = immediateTooltipOwner(screen, graphics, mouseX, mouseY);
         } else {
             TOOLTIP_CANDIDATE.remove();
         }
-        if (owner != null) {
-            TOOLTIP_ADJUSTMENT.set(new TooltipAdjustment(event.getGraphics(), z(owner)));
-        }
+        if (owner == null) return false;
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, z(owner));
+        return true;
     }
 
-    private static void adjustTooltipDepth(RenderTooltipEvent.Color event) {
-        TooltipAdjustment adjustment = TOOLTIP_ADJUSTMENT.get();
-        TOOLTIP_ADJUSTMENT.remove();
-        if (adjustment != null && adjustment.graphics() == event.getGraphics()) {
-            event.getGraphics().pose().translate(0, 0, adjustment.z());
-        }
+    static void endTooltipRender(GuiGraphics graphics, boolean adjusted) {
+        if (adjusted) graphics.pose().popPose();
     }
 
     private static Field findDeferredTooltipField() {
@@ -180,6 +188,4 @@ final class PanelStack {
 
     private record TooltipCandidate(
             Panel panel, Screen screen, GuiGraphics graphics, int mouseX, int mouseY) { }
-
-    private record TooltipAdjustment(GuiGraphics graphics, int z) { }
 }

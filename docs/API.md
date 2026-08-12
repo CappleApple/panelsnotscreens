@@ -114,3 +114,7 @@ owner; a focused panel's tooltip renders above every panel.
 Tooltips rendered immediately after `PanelManager.render(...)` are associated with the last panel
 in that render batch under the same mouse coordinates. This supports consumer-managed tooltip
 lists without requiring the tooltip call to occur inside `PanelContent.render(...)`.
+
+The tooltip depth scope wraps the complete Minecraft tooltip call, so it is also restored correctly
+when a compatibility mod replaces or cancels the vanilla renderer. Tooltip Overhaul is detected at
+runtime and receives the wider inter-panel depth range required by its styled layers.

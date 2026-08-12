@@ -2,6 +2,15 @@
 
 All notable changes to Panels Not Screens are documented here.
 
+## 1.1.4 - 2026-08-12
+
+### Fixed
+
+- Tooltip depth now remains scoped to its owning panel even when another mod replaces and cancels
+  Minecraft's tooltip renderer.
+- Tooltip Overhaul's styled tooltip layers no longer split above and below focused panels, and its
+  wider depth range is reserved between stacked panels.
+
 ## 1.1.3 - 2026-08-11
 
 ### Fixed
