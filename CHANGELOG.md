@@ -2,6 +2,12 @@
 
 All notable changes to Panels Not Screens are documented here.
 
+## 1.1.5 - 2026-08-13
+
+### Fixed
+
+- Items carried by the mouse, including items returning to a slot, now render in front of panels.
+
 ## 1.1.4 - 2026-08-12
 
 ### Fixed

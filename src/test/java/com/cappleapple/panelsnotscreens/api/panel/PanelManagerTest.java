@@ -1,10 +1,12 @@
 package com.cappleapple.panelsnotscreens.api.panel;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.cappleapple.panelsnotscreens.api.widget.PanelButton;
 import java.util.List;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -13,6 +15,14 @@ import org.junit.jupiter.api.Test;
 class PanelManagerTest {
     private static final int SCREEN_WIDTH = 400;
     private static final int SCREEN_HEIGHT = 300;
+
+    @Test
+    void floatingItemsRenderAbovePanelsWithoutExceedingTheGuiDepthRange() {
+        assertTrue(PanelStack.floatingItemZ() > PanelStack.maxBaseZ());
+        assertEquals(
+                GuiGraphics.MAX_GUI_Z,
+                PanelStack.floatingItemZ() + PanelStack.FLOATING_ITEM_DECORATION_Z);
+    }
 
     @Test
     void clickedPanelBecomesTopmost() {
