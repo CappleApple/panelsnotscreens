@@ -12,15 +12,17 @@ import net.neoforged.fml.ModList;
 /** Shared render order for every panel loaded from this library, including panels owned by different mods. */
 final class PanelStack {
     private static final int BASE_Z = 300;
-    private static final int VANILLA_TOOLTIP_Z = 400;
+    // Vanilla starts tooltips at Z 400; bundle item decorations can add another 200.
+    private static final int VANILLA_TOOLTIP_DEPTH = 600;
     // Tooltip Overhaul reaches Z 2300 and some icon/effect layers apply that depth a second time.
-    private static final int TOOLTIP_OVERHAUL_Z = 4700;
-    private static final int DEFAULT_LAYER_SPACING = 500;
+    private static final int TOOLTIP_OVERHAUL_DEPTH = 4700;
+    private static final int VANILLA_LAYER_SPACING = 700;
     private static final int TOOLTIP_OVERHAUL_LAYER_SPACING = 4800;
-    private static final int DEFAULT_MAX_BASE_Z = 9000;
+    private static final int PANEL_CONTENT_DEPTH = 200;
     static final int FLOATING_ITEM_DECORATION_Z = 200;
     private static final String TOOLTIP_OVERHAUL_MOD_ID = "tooltipoverhaul";
     private static final ArrayList<WeakReference<Panel>> PANELS = new ArrayList<>();
+    private static final WeakHashMap<Panel, WeakReference<Screen>> ACTIVE_SCREENS = new WeakHashMap<>();
     private static final WeakHashMap<Screen, DeferredTooltipOwner> DEFERRED_TOOLTIP_OWNERS = new WeakHashMap<>();
     private static final ThreadLocal<Panel> RENDERING_PANEL = new ThreadLocal<>();
     private static final ThreadLocal<TooltipCandidate> TOOLTIP_CANDIDATE = new ThreadLocal<>();
@@ -48,8 +50,24 @@ final class PanelStack {
         return zForIndex(PANELS.size() - 1);
     }
 
-    static synchronized int tooltipZ(Panel panel) {
-        return z(panel) + tooltipDepth();
+    static synchronized void activate(Panel panel, Screen screen) {
+        ACTIVE_SCREENS.put(panel, new WeakReference<>(screen));
+    }
+
+    static synchronized Panel topmostAt(Screen screen, double mouseX, double mouseY) {
+        compact();
+        for (int index = PANELS.size() - 1; index >= 0; index--) {
+            Panel panel = PANELS.get(index).get();
+            if (panel != null && isActiveOn(panel, screen) && panel.ownsPoint(screen, mouseX, mouseY)) {
+                return panel;
+            }
+        }
+        return null;
+    }
+
+    static boolean canReceivePointer(Panel panel, Screen screen, double mouseX, double mouseY) {
+        Panel topmost = topmostAt(screen, mouseX, mouseY);
+        return topmost == null || topmost == panel;
     }
 
     private static void remove(Panel panel) {
@@ -63,6 +81,11 @@ final class PanelStack {
         PANELS.removeIf(reference -> reference.get() == null);
     }
 
+    private static boolean isActiveOn(Panel panel, Screen screen) {
+        WeakReference<Screen> activeScreen = ACTIVE_SCREENS.get(panel);
+        return activeScreen != null && activeScreen.get() == screen;
+    }
+
     private static int zForIndex(int index) {
         int gaps = Math.max(1, PANELS.size() - 1);
         int spacing = Math.min(preferredLayerSpacing(), (maxBaseZ() - BASE_Z) / gaps);
@@ -70,17 +93,50 @@ final class PanelStack {
     }
 
     private static int preferredLayerSpacing() {
-        return hasTooltipOverhaul() ? TOOLTIP_OVERHAUL_LAYER_SPACING : DEFAULT_LAYER_SPACING;
+        return hasTooltipOverhaul() ? TOOLTIP_OVERHAUL_LAYER_SPACING : VANILLA_LAYER_SPACING;
     }
 
     private static int tooltipDepth() {
-        return hasTooltipOverhaul() ? TOOLTIP_OVERHAUL_Z : VANILLA_TOOLTIP_Z;
+        return hasTooltipOverhaul() ? TOOLTIP_OVERHAUL_DEPTH : VANILLA_TOOLTIP_DEPTH;
     }
 
     static int maxBaseZ() {
-        return hasTooltipOverhaul()
-                ? (int) GuiGraphics.MAX_GUI_Z - TOOLTIP_OVERHAUL_Z
-                : DEFAULT_MAX_BASE_Z;
+        return (int) GuiGraphics.MAX_GUI_Z - tooltipDepth() - PANEL_CONTENT_DEPTH;
+    }
+
+    static int tooltipForegroundBaseZ() {
+        return maxBaseZ() + PANEL_CONTENT_DEPTH;
+    }
+
+    static int tooltipMaxZ() {
+        return tooltipForegroundBaseZ() + tooltipDepth();
+    }
+
+    static float tooltipForegroundOffset(float currentZ) {
+        return tooltipForegroundBaseZ() - currentZ;
+    }
+
+    static synchronized float panelTooltipScale(Panel owner, Screen screen) {
+        int ownerZ = z(owner);
+        int ownerIndex = -1;
+        for (int index = 0; index < PANELS.size(); index++) {
+            if (PANELS.get(index).get() == owner) {
+                ownerIndex = index;
+                break;
+            }
+        }
+        if (ownerIndex < 0) return 1.0F;
+        for (int index = ownerIndex + 1; index < PANELS.size(); index++) {
+            Panel next = PANELS.get(index).get();
+            if (next == null || !isActiveOn(next, screen)) continue;
+            int availableDepth = z(next) - ownerZ - 1;
+            return Math.min(1.0F, Math.max(0.0F, (float) availableDepth / tooltipDepth()));
+        }
+        return 1.0F;
+    }
+
+    static float panelTooltipMaxZ(Panel owner, Screen screen) {
+        return z(owner) + tooltipDepth() * panelTooltipScale(owner, screen);
     }
 
     static float floatingItemZ() {
@@ -91,8 +147,9 @@ final class PanelStack {
         return ModList.get().isLoaded(TOOLTIP_OVERHAUL_MOD_ID);
     }
 
-    static void beginRender(Panel panel) {
+    static void beginRender(Panel panel, Screen screen) {
         beginRenderCollection();
+        activate(panel, screen);
         RENDERING_PANEL.set(panel);
     }
 
@@ -115,9 +172,15 @@ final class PanelStack {
 
     static void captureTooltipCandidate(
             Panel panel, Screen screen, GuiGraphics graphics, int mouseX, int mouseY) {
-        if (panel.ownsPoint(screen, mouseX, mouseY)) {
-            TOOLTIP_CANDIDATE.set(new TooltipCandidate(panel, screen, graphics, mouseX, mouseY));
-        }
+        if (!panel.ownsPoint(screen, mouseX, mouseY)) return;
+        TooltipCandidate current = TOOLTIP_CANDIDATE.get();
+        if (current != null
+                && current.screen() == screen
+                && current.graphics() == graphics
+                && current.mouseX() == mouseX
+                && current.mouseY() == mouseY
+                && z(current.panel()) >= z(panel)) return;
+        TOOLTIP_CANDIDATE.set(new TooltipCandidate(panel, screen, graphics, mouseX, mouseY));
     }
 
     static Panel immediateTooltipOwner(
@@ -159,25 +222,100 @@ final class PanelStack {
         return owner.panel().get();
     }
 
-    static boolean beginTooltipRender(Screen screen, GuiGraphics graphics, int mouseX, int mouseY) {
-        if (screen == null || RENDERING_PANEL.get() != null) return false;
-        Panel owner = deferredTooltipOwner(screen);
-        synchronized (PanelStack.class) {
-            DEFERRED_TOOLTIP_OWNERS.remove(screen);
-        }
+    static PanelTooltipRenderHooks.Result beginTooltipRender(
+            Screen screen, GuiGraphics graphics, int mouseX, int mouseY) {
+        if (screen == null) return PanelTooltipRenderHooks.Result.UNCHANGED;
+        Panel owner = RENDERING_PANEL.get();
         if (owner == null) {
-            owner = immediateTooltipOwner(screen, graphics, mouseX, mouseY);
-        } else {
-            TOOLTIP_CANDIDATE.remove();
+            owner = deferredTooltipOwner(screen);
+            synchronized (PanelStack.class) {
+                DEFERRED_TOOLTIP_OWNERS.remove(screen);
+            }
+            if (owner == null) {
+                owner = immediateTooltipOwner(screen, graphics, mouseX, mouseY);
+            } else {
+                TOOLTIP_CANDIDATE.remove();
+            }
         }
-        if (owner == null) return false;
+
+        Panel topmost = topmostAt(screen, mouseX, mouseY);
+        if (owner == null) {
+            if (topmost != null) return PanelTooltipRenderHooks.Result.SKIP;
+            return adjustTooltip(graphics, tooltipForegroundBaseZ(), 1.0F);
+        }
+        if (!isActiveOn(owner, screen) || (topmost != null && topmost != owner)) {
+            return PanelTooltipRenderHooks.Result.SKIP;
+        }
+        float scale = panelTooltipScale(owner, screen);
+        if (scale <= 0.0F) return PanelTooltipRenderHooks.Result.SKIP;
+        return adjustTooltip(graphics, z(owner), scale);
+    }
+
+    private static PanelTooltipRenderHooks.Result adjustTooltip(
+            GuiGraphics graphics, float targetBaseZ, float depthScale) {
+        float currentZ = graphics.pose().last().pose().m32();
         graphics.pose().pushPose();
-        graphics.pose().translate(0, 0, z(owner));
+        graphics.pose().translate(0, 0, targetBaseZ - currentZ);
+        if (depthScale < 1.0F) graphics.pose().scale(1.0F, 1.0F, depthScale);
+        return PanelTooltipRenderHooks.Result.ADJUSTED;
+    }
+
+    static void endTooltipRender(GuiGraphics graphics, PanelTooltipRenderHooks.Result result) {
+        if (result == PanelTooltipRenderHooks.Result.ADJUSTED) graphics.pose().popPose();
+    }
+
+    static MouseInputAttempt beginMousePress(
+            Screen screen, double mouseX, double mouseY) {
+        return attempt(topmostAt(screen, mouseX, mouseY));
+    }
+
+    static synchronized MouseInputAttempt beginMouseRelease(Screen screen, int button) {
+        compact();
+        for (int index = PANELS.size() - 1; index >= 0; index--) {
+            Panel panel = PANELS.get(index).get();
+            if (panel != null && panel.hasPointerCapture(screen, button)) return attempt(panel);
+        }
+        return null;
+    }
+
+    static MouseInputAttempt beginMouseScroll(
+            Screen screen, double mouseX, double mouseY) {
+        return attempt(topmostAt(screen, mouseX, mouseY));
+    }
+
+    static boolean finishMousePress(
+            MouseInputAttempt attempt, Screen screen, double mouseX, double mouseY, int button) {
+        if (attempt == null) return false;
+        if (attempt.wasHandled()) return true;
+        cancelPointerCaptures();
+        return attempt.panel().mouseClicked(screen, mouseX, mouseY, button);
+    }
+
+    static boolean finishMouseRelease(
+            MouseInputAttempt attempt, Screen screen, double mouseX, double mouseY, int button) {
+        if (attempt == null) return false;
+        return attempt.wasHandled() || attempt.panel().mouseReleased(screen, mouseX, mouseY, button);
+    }
+
+    static boolean finishMouseScroll(
+            MouseInputAttempt attempt, Screen screen, double mouseX, double mouseY, double amount) {
+        if (attempt == null) return false;
+        if (attempt.wasHandled() || attempt.panel().mouseScrolled(screen, mouseX, mouseY, amount)) return true;
+        if (!attempt.panel().ownsPoint(screen, mouseX, mouseY)) return false;
+        attempt.panel().bringToFront();
         return true;
     }
 
-    static void endTooltipRender(GuiGraphics graphics, boolean adjusted) {
-        if (adjusted) graphics.pose().popPose();
+    private static MouseInputAttempt attempt(Panel panel) {
+        return panel == null ? null : new MouseInputAttempt(panel, panel.mouseInputRevision());
+    }
+
+    private static synchronized void cancelPointerCaptures() {
+        compact();
+        for (WeakReference<Panel> reference : PANELS) {
+            Panel panel = reference.get();
+            if (panel != null) panel.cancelPointerCapture();
+        }
     }
 
     private static Field findDeferredTooltipField() {
@@ -193,4 +331,10 @@ final class PanelStack {
 
     private record TooltipCandidate(
             Panel panel, Screen screen, GuiGraphics graphics, int mouseX, int mouseY) { }
+
+    record MouseInputAttempt(Panel panel, long revision) {
+        boolean wasHandled() {
+            return panel.mouseInputRevision() != revision;
+        }
+    }
 }

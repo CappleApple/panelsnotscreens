@@ -1,11 +1,13 @@
 package com.cappleapple.panelsnotscreens.api.panel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.cappleapple.panelsnotscreens.api.widget.PanelButton;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -22,6 +24,119 @@ class PanelManagerTest {
         assertEquals(
                 GuiGraphics.MAX_GUI_Z,
                 PanelStack.floatingItemZ() + PanelStack.FLOATING_ITEM_DECORATION_Z);
+    }
+
+    @Test
+    void screenTooltipsReserveAForegroundLayerAboveEveryPanel() {
+        Panel first = panel("first", 20, 20);
+        Panel second = panel("second", 200, 20);
+        manager(first, second);
+
+        assertTrue(PanelStack.tooltipForegroundBaseZ() > PanelStack.maxBaseZ());
+        assertTrue(PanelStack.tooltipForegroundBaseZ() > PanelStack.z(second));
+        assertEquals(GuiGraphics.MAX_GUI_Z, PanelStack.tooltipMaxZ());
+    }
+
+    @Test
+    void screenTooltipOffsetNormalizesAnyIncomingPoseToTheForegroundLayer() {
+        Panel panel = panel("panel", 20, 20);
+        float panelZ = PanelStack.z(panel);
+
+        assertEquals(PanelStack.tooltipForegroundBaseZ(), PanelStack.tooltipForegroundOffset(0.0F));
+        assertEquals(
+                PanelStack.tooltipForegroundBaseZ(),
+                panelZ + PanelStack.tooltipForegroundOffset(panelZ));
+    }
+
+    @Test
+    void backgroundPanelTooltipStaysBelowTheNextActivePanel() {
+        Panel background = panel("background", 20, 20);
+        Panel foreground = panel("foreground", 20, 20);
+        Screen screen = screen();
+        PanelStack.activate(background, screen);
+        PanelStack.activate(foreground, screen);
+
+        assertTrue(PanelStack.panelTooltipMaxZ(background, screen) < PanelStack.z(foreground));
+    }
+
+    @Test
+    void unhandledMouseInputFallsBackToTheTopmostPanel() {
+        Panel background = panel("background_input", 20, 20);
+        Panel foreground = panel("foreground_input", 20, 20);
+        Screen screen = screen();
+        PanelStack.activate(background, screen);
+        PanelStack.activate(foreground, screen);
+        boolean backgroundExpanded = background.isExpanded();
+        boolean foregroundExpanded = foreground.isExpanded();
+
+        assertSame(foreground, PanelStack.topmostAt(screen, 25, 25));
+        PanelStack.MouseInputAttempt press = PanelStack.beginMousePress(screen, 25, 25);
+        assertTrue(PanelStack.finishMousePress(press, screen, 25, 25, 0));
+        PanelStack.MouseInputAttempt release = PanelStack.beginMouseRelease(screen, 0);
+        assertTrue(PanelStack.finishMouseRelease(release, screen, 25, 25, 0));
+        assertEquals(!foregroundExpanded, foreground.isExpanded());
+        assertEquals(backgroundExpanded, background.isExpanded());
+    }
+
+    @Test
+    void topmostPanelConsumesScrollBeforeUnderlyingGuiEvenWhenItsContentDoesNot() {
+        Panel background = panel("background_scroll_capture", 20, 20);
+        Panel foreground = panel("foreground_scroll_capture", 20, 20);
+        Screen screen = screen();
+        PanelStack.activate(background, screen);
+        PanelStack.activate(foreground, screen);
+
+        assertSame(foreground, PanelStack.topmostAt(screen, 25, 25));
+        PanelStack.MouseInputAttempt scroll = PanelStack.beginMouseScroll(screen, 25, 25);
+        assertTrue(PanelStack.finishMouseScroll(scroll, screen, 25, 25, 1));
+    }
+
+    @Test
+    void directConsumerHooksCannotClaimAnOverlappedBackgroundPanel() {
+        Panel background = panel("direct_background", 20, 20);
+        Panel foreground = panel("direct_foreground", 20, 20);
+        Screen screen = screen();
+        PanelStack.activate(background, screen);
+        PanelStack.activate(foreground, screen);
+
+        assertFalse(background.mouseClicked(screen, 25, 25, 0));
+        assertTrue(foreground.mouseClicked(screen, 25, 25, 0));
+    }
+
+    @Test
+    void consumerHandledMouseInputIsNotAppliedTwiceByTheFallback() {
+        AtomicInteger scrollCalls = new AtomicInteger();
+        Panel panel = PanelBuilder.create(id("consumer_handled"))
+                .position(20, 20)
+                .size(80, 60)
+                .dockSide(DockSide.RIGHT)
+                .automaticDocking(false)
+                .content(new PanelContent() {
+                    @Override
+                    public boolean mouseScrolled(PanelContext context, double mouseX, double mouseY, double amount) {
+                        scrollCalls.incrementAndGet();
+                        return true;
+                    }
+                })
+                .build();
+        PanelManager manager = manager(panel);
+        Screen screen = screen();
+        PanelStack.activate(panel, screen);
+        boolean initiallyExpanded = panel.isExpanded();
+
+        PanelStack.MouseInputAttempt press = PanelStack.beginMousePress(screen, 25, 25);
+        assertTrue(manager.mouseClicked(screen, 25, 25, 0));
+        assertTrue(PanelStack.finishMousePress(press, screen, 25, 25, 0));
+        PanelStack.MouseInputAttempt release = PanelStack.beginMouseRelease(screen, 0);
+        assertTrue(manager.mouseReleased(screen, 25, 25, 0));
+        assertTrue(PanelStack.finishMouseRelease(release, screen, 25, 25, 0));
+        assertEquals(!initiallyExpanded, panel.isExpanded());
+
+        panel.open();
+        PanelStack.MouseInputAttempt scroll = PanelStack.beginMouseScroll(screen, 50, 30);
+        assertTrue(manager.mouseScrolled(screen, 50, 30, 1));
+        assertTrue(PanelStack.finishMouseScroll(scroll, screen, 50, 30, 1));
+        assertEquals(1, scrollCalls.get());
     }
 
     @Test
@@ -76,39 +191,41 @@ class PanelManagerTest {
 
     @Test
     void deferredTooltipKeepsThePanelThatRequestedItAsOwner() {
-        Panel tooltipOwner = panel("owner", 20, 20);
-        Panel focused = panel("focused", 20, 20);
+        Panel tooltipOwner = panel("deferred_owner", 20, 20);
+        Panel foreground = panel("deferred_foreground", 20, 20);
         Screen screen = screen();
+        PanelStack.activate(tooltipOwner, screen);
+        PanelStack.activate(foreground, screen);
         Object beforeTooltip = PanelStack.deferredTooltip(screen);
         screen.setTooltipForNextRenderPass(List.of(Component.literal("Owned tooltip").getVisualOrderText()));
         PanelStack.captureDeferredTooltipOwner(tooltipOwner, screen, beforeTooltip);
 
-        Object beforeFocusedPanel = PanelStack.deferredTooltip(screen);
-        PanelStack.captureDeferredTooltipOwner(focused, screen, beforeFocusedPanel);
-        focused.bringToFront();
+        Object beforeForeground = PanelStack.deferredTooltip(screen);
+        PanelStack.captureDeferredTooltipOwner(foreground, screen, beforeForeground);
 
         assertSame(tooltipOwner, PanelStack.deferredTooltipOwner(screen));
-        assertTrue(PanelStack.z(focused) > PanelStack.z(tooltipOwner));
-        assertTrue(PanelStack.tooltipZ(tooltipOwner) < PanelStack.z(focused));
+        assertTrue(PanelStack.panelTooltipMaxZ(tooltipOwner, screen) < PanelStack.z(foreground));
 
         tooltipOwner.bringToFront();
 
-        assertTrue(PanelStack.tooltipZ(tooltipOwner) > PanelStack.z(focused));
+        assertTrue(PanelStack.panelTooltipMaxZ(tooltipOwner, screen) > PanelStack.z(foreground));
     }
 
     @Test
-    void immediateTooltipKeepsThePanelRenderedUnderThePointerAsOwner() {
-        Panel tooltipOwner = panel("owner", 20, 20);
-        Panel focused = panel("focused", 200, 20);
+    void immediateTooltipUsesTheTopmostPanelRegardlessOfRenderOrder() {
+        Panel tooltipOwner = panel("immediate_owner", 20, 20);
+        Panel foreground = panel("immediate_foreground", 20, 20);
         Screen screen = screen();
-        focused.bringToFront();
+        PanelStack.activate(tooltipOwner, screen);
+        PanelStack.activate(foreground, screen);
 
         PanelStack.beginRenderCollection();
+        PanelStack.captureTooltipCandidate(foreground, screen, null, 25, 25);
         PanelStack.captureTooltipCandidate(tooltipOwner, screen, null, 25, 25);
         PanelStack.endRenderCollection();
 
-        assertSame(tooltipOwner, PanelStack.immediateTooltipOwner(screen, null, 25, 25));
-        assertTrue(PanelStack.tooltipZ(tooltipOwner) < PanelStack.z(focused));
+        assertSame(foreground, PanelStack.immediateTooltipOwner(screen, null, 25, 25));
+        assertTrue(PanelStack.panelTooltipMaxZ(tooltipOwner, screen) < PanelStack.z(foreground));
     }
 
     private static Panel panel(String path, int x, int y) {

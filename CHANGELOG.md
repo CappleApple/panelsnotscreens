@@ -2,6 +2,22 @@
 
 All notable changes to Panels Not Screens are documented here.
 
+## 1.1.6 - 2026-08-20
+
+### Fixed
+
+- Inventory, screen, JEI, and EMI tooltips outside panel-owned pointer areas now render above every
+  panel and attached button.
+- Panel-owned tooltips now render above their owning panel but below panels stacked in front, and
+  covered background panels no longer show a competing tooltip.
+- Hovering a panel suppresses tooltips from the underlying screen and ingredient overlays.
+- Mouse presses, releases, and scrolling over a panel are now captured by the topmost panel before
+  the screen, JEI, or EMI can handle them.
+- Existing consumer `ScreenEvent` handlers remain authoritative, and the library fallback no longer
+  bypasses owner capture state or applies the same input twice when multiple panel mods are loaded.
+- Vanilla bundle tooltip items and Tooltip Overhaul's full styled depth range are reserved within
+  the applicable foreground or panel layer without exceeding Minecraft's maximum GUI depth.
+
 ## 1.1.5 - 2026-08-13
 
 ### Fixed

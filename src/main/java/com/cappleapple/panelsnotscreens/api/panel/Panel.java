@@ -55,6 +55,7 @@ public final class Panel {
     private double pressX;
     private double pressY;
     private PanelButton pressedButton;
+    private long mouseInputRevision;
 
     Panel(PanelBuilder builder) {
         id = builder.id;
@@ -163,7 +164,7 @@ public final class Panel {
         Object deferredTooltipBeforeRender = PanelStack.deferredTooltip(screen);
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, PanelStack.z(this));
-        PanelStack.beginRender(this);
+        PanelStack.beginRender(this, screen);
         try {
             if (expanded) {
                 renderer.renderPanel(context, graphics, mouseX, mouseY);
@@ -197,7 +198,7 @@ public final class Panel {
     }
 
     public boolean mouseClicked(Screen screen, double mouseX, double mouseY, int button) {
-        if (!visible) return false;
+        if (!visible || !PanelStack.canReceivePointer(this, screen, mouseX, mouseY)) return false;
         PanelContext context = context(screen, 0);
         if (context.layout().handle().contains(mouseX, mouseY)) {
             bringToFront();
@@ -211,7 +212,7 @@ public final class Panel {
                 pressX = mouseX;
                 pressY = mouseY;
             }
-            return true;
+            return recordMouseInput();
         }
         if (!expanded) return false;
         for (int index = buttons.size() - 1; index >= 0; index--) {
@@ -221,7 +222,7 @@ public final class Panel {
             capturedScreen = screen;
             capturedButton = button;
             pressedButton = candidate;
-            return true;
+            return recordMouseInput();
         }
         if (!context.layout().panel().contains(mouseX, mouseY)) return false;
         bringToFront();
@@ -229,7 +230,7 @@ public final class Panel {
         capturedButton = button;
         contentCaptured = true;
         content.mouseClicked(context, mouseX, mouseY, button);
-        return true;
+        return recordMouseInput();
     }
 
     public boolean mouseReleased(Screen screen, double mouseX, double mouseY, int button) {
@@ -246,16 +247,17 @@ public final class Panel {
             content.mouseReleased(context, mouseX, mouseY, button);
         }
         clearPointerCapture();
+        if (consumed) mouseInputRevision++;
         return consumed;
     }
 
     public boolean mouseScrolled(Screen screen, double mouseX, double mouseY, double amount) {
-        if (!visible || !expanded) return false;
+        if (!visible || !expanded || !PanelStack.canReceivePointer(this, screen, mouseX, mouseY)) return false;
         PanelContext context = context(screen, 0);
         if (!context.layout().panel().contains(mouseX, mouseY)) return false;
         bringToFront();
         content.mouseScrolled(context, mouseX, mouseY, amount);
-        return true;
+        return recordMouseInput();
     }
 
     public boolean keyPressed(Screen screen, int keyCode, int scanCode, int modifiers) {
@@ -293,6 +295,19 @@ public final class Panel {
         if (!expanded) return false;
         if (layout.panel().contains(mouseX, mouseY)) return true;
         return visibleButtons().stream().anyMatch(button -> button.bounds(layout).contains(mouseX, mouseY));
+    }
+
+    boolean hasPointerCapture(Screen screen, int button) {
+        return capturedScreen == screen && capturedButton == button;
+    }
+
+    long mouseInputRevision() {
+        return mouseInputRevision;
+    }
+
+    private boolean recordMouseInput() {
+        mouseInputRevision++;
+        return true;
     }
 
     public List<Rect2i> currentAreas(Screen screen) {

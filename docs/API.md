@@ -96,25 +96,36 @@ The store receives the namespaced panel ID and a `PanelState` containing X/Y han
 
 ## Multiple panels and z order
 
-Create a `PanelManager` owned by your mod and route rendering and input through it. The add order
-sets only the initial back-to-front order. Whenever a panel handles a click, release, scroll,
-keyboard event, or typed character, the manager moves it to the front so the most recently
-interacted-with panel is rendered on top.
+Create a `PanelManager` owned by your mod and render all of its panels through it. The add order
+sets only the initial back-to-front order. The manager activates the complete collection before it
+starts drawing, which lets tooltip ownership account for every overlapping panel in the frame.
+
+Mouse presses, releases, and scrolling preserve existing consumer `ScreenEvent` handlers. The
+library snapshots the globally topmost panel before those handlers run, detects whether its owner
+handled the event, and applies a final fallback only when necessary. This prevents duplicate input
+and keeps consumer capture or persistence state intact while stopping the screen, its widgets, JEI,
+or EMI from claiming the same pixels. Direct calls to a covered background panel are rejected.
+Route keyboard and character input through the manager. Whenever a panel handles input, it moves
+to the front so the most recently interacted-with panel is rendered on top.
 
 Render depth is coordinated across all `Panel` instances loaded from the same library, even when
 different mods own separate managers. The shared stack uses weak references and does not share
 panel content or persisted state. For an interaction handled outside the panel input methods, call
 `panel.bringToFront()` explicitly.
 
-Tooltips rendered directly by panel content inherit the panel's render depth. When panel content
-defers a tooltip to the owning screen, the library records which panel requested it and elevates the
-tooltip above that panel. A background panel's tooltip remains below panels stacked in front of its
-owner; a focused panel's tooltip renders above every panel.
+Ordinary screen, inventory, JEI, and EMI tooltips rendered while the pointer is outside every panel
+are normalized to a shared foreground layer above all panels and attached buttons. When the pointer
+is over a panel, the underlying GUI tooltip is suppressed so it cannot show through that panel.
+
+Tooltips rendered directly by panel content or deferred to the screen's next render pass retain
+their panel ownership. Only the topmost panel under the pointer may show its tooltip. Its tooltip
+renders above its owning panel, but remains below any active panel stacked in front.
 
 Tooltips rendered immediately after `PanelManager.render(...)` are associated with the last panel
 in that render batch under the same mouse coordinates. This supports consumer-managed tooltip
 lists without requiring the tooltip call to occur inside `PanelContent.render(...)`.
 
-The tooltip depth scope wraps the complete Minecraft tooltip call, so it is also restored correctly
-when a compatibility mod replaces or cancels the vanilla renderer. Tooltip Overhaul is detected at
-runtime and receives the wider inter-panel depth range required by its styled layers.
+The tooltip depth scope wraps the complete Minecraft tooltip call, so it is restored correctly when
+a compatibility mod replaces or cancels the vanilla renderer. Tooltip Overhaul is detected at
+runtime and receives enough depth for all of its styled layers while remaining within Minecraft's
+GUI depth range and the owning panel's Z interval.

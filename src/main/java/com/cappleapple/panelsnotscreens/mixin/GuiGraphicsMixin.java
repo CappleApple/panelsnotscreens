@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.Mixin;
 @Mixin(GuiGraphics.class)
 abstract class GuiGraphicsMixin {
     @WrapMethod(method = "renderTooltipInternal")
-    private void panelsnotscreens$renderTooltipAtOwnerDepth(
+    private void panelsnotscreens$renderTooltipInFront(
             Font font,
             List<ClientTooltipComponent> components,
             int mouseX,
@@ -22,12 +22,13 @@ abstract class GuiGraphicsMixin {
             ClientTooltipPositioner positioner,
             Operation<Void> original) {
         GuiGraphics graphics = (GuiGraphics) (Object) this;
-        boolean adjusted = PanelTooltipRenderHooks.begin(
+        PanelTooltipRenderHooks.Result result = PanelTooltipRenderHooks.begin(
                 Minecraft.getInstance().screen, graphics, mouseX, mouseY);
+        if (result == PanelTooltipRenderHooks.Result.SKIP) return;
         try {
             original.call(font, components, mouseX, mouseY, positioner);
         } finally {
-            PanelTooltipRenderHooks.end(graphics, adjusted);
+            PanelTooltipRenderHooks.end(graphics, result);
         }
     }
 }

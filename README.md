@@ -69,6 +69,8 @@ if (panel.mouseScrolled(screen, mouseX, mouseY, amount)) {
 
 Input methods report whether the panel consumed the interaction. This allows the consuming mod to prevent the underlying Minecraft screen from handling the same input when necessary.
 
+Existing `ScreenEvent` mouse handlers remain authoritative. Panels Not Screens tracks the globally topmost panel before those handlers run and applies a final fallback only when the owner did not handle the event, preventing the screen or JEI/EMI from claiming the same pixels. Route keyboard and character input through the panel or a `PanelManager` when your content uses those callbacks.
+
 See [docs/API.md](docs/API.md) for complete examples covering textured panels, custom content, attached buttons, persistence, and other configuration options.
 
 ## Building
@@ -82,7 +84,7 @@ Build and run the test suite with:
 The resulting library JAR is written to:
 
 ```text
-build/libs/panelsnotscreens-1.1.5.jar
+build/libs/panelsnotscreens-1.1.6.jar
 ```
 
 ## License

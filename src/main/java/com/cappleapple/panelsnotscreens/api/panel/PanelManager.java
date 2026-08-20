@@ -37,6 +37,7 @@ public final class PanelManager {
     public void render(Screen screen, GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         PanelStack.beginRenderCollection();
         try {
+            for (Panel panel : panels) PanelStack.activate(panel, screen);
             for (Panel panel : panels) panel.render(screen, graphics, mouseX, mouseY, partialTick);
         } finally {
             PanelStack.endRenderCollection();
