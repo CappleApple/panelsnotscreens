@@ -22,7 +22,7 @@ class PanelManagerTest {
     void floatingItemsRenderAbovePanelsWithoutExceedingTheGuiDepthRange() {
         assertTrue(PanelStack.floatingItemZ() > PanelStack.maxBaseZ());
         assertEquals(
-                GuiGraphics.MAX_GUI_Z,
+                GuiGraphics.MAX_GUI_Z - PanelStack.GUI_DEPTH_HEADROOM,
                 PanelStack.floatingItemZ() + PanelStack.FLOATING_ITEM_DECORATION_Z);
     }
 

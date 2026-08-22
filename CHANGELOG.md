@@ -2,6 +2,12 @@
 
 All notable changes to Panels Not Screens are documented here.
 
+## 1.1.7 - 2026-08-22
+
+### Fixed
+
+- Mouse-held stack amounts now retain their white foreground glyph by reserving headroom below Minecraft's maximum GUI depth.
+
 ## 1.1.6 - 2026-08-20
 
 ### Fixed

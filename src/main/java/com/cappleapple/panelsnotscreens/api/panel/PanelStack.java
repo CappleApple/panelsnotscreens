@@ -20,6 +20,7 @@ final class PanelStack {
     private static final int TOOLTIP_OVERHAUL_LAYER_SPACING = 4800;
     private static final int PANEL_CONTENT_DEPTH = 200;
     static final int FLOATING_ITEM_DECORATION_Z = 200;
+    static final int GUI_DEPTH_HEADROOM = 1;
     private static final String TOOLTIP_OVERHAUL_MOD_ID = "tooltipoverhaul";
     private static final ArrayList<WeakReference<Panel>> PANELS = new ArrayList<>();
     private static final WeakHashMap<Panel, WeakReference<Screen>> ACTIVE_SCREENS = new WeakHashMap<>();
@@ -140,7 +141,7 @@ final class PanelStack {
     }
 
     static float floatingItemZ() {
-        return GuiGraphics.MAX_GUI_Z - FLOATING_ITEM_DECORATION_Z;
+        return GuiGraphics.MAX_GUI_Z - FLOATING_ITEM_DECORATION_Z - GUI_DEPTH_HEADROOM;
     }
 
     private static boolean hasTooltipOverhaul() {

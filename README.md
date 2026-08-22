@@ -84,7 +84,7 @@ Build and run the test suite with:
 The resulting library JAR is written to:
 
 ```text
-build/libs/panelsnotscreens-1.1.6.jar
+build/libs/panelsnotscreens-1.1.7.jar
 ```
 
 ## License
